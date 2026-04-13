@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // ── Types matching backend AuditResponse schema ─────────────
@@ -30,9 +30,24 @@ interface AuditApiResponse {
   error?: string;
 }
 
+interface AuditHistoryItem {
+  id: string;
+  contractName: string;
+  timestamp: string;
+  status: 'completed' | 'error';
+  overallStatus?: 'vulnerable' | 'secure';
+}
+
 // ── Constants ───────────────────────────────────────────────
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
+
+const TERMINAL_MESSAGES = [
+  'Connecting to Nosana GPU node...',
+  'Parsing Abstract Syntax Tree...',
+  'Evaluating Semantic Roles...',
+  'Generating strict Zod schema...',
+] as const;
 
 const SAMPLE_CONTRACT = `// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
@@ -104,6 +119,50 @@ export default function HomePage() {
   const [isAuditing, setIsAuditing] = useState(false);
   const [result, setResult] = useState<AuditApiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // ── Recent audits history ─────────────────────────────────
+  const [recentAudits, setRecentAudits] = useState<AuditHistoryItem[]>([]);
+
+  const fetchHistory = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/audits`);
+      if (res.ok) {
+        const data: AuditHistoryItem[] = await res.json();
+        setRecentAudits(data);
+      }
+    } catch {
+      // silently ignore — history is non-critical
+    }
+  }, []);
+
+  // Fetch on mount + re-fetch whenever a new audit result lands
+  useEffect(() => {
+    fetchHistory();
+  }, [fetchHistory, result]);
+
+  // ── Terminal-style loading message cycler ──────────────────
+  const [terminalIdx, setTerminalIdx] = useState(0);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (isAuditing) {
+      setTerminalIdx(0);
+      intervalRef.current = setInterval(() => {
+        setTerminalIdx((prev) => (prev + 1) % TERMINAL_MESSAGES.length);
+      }, 1500);
+    } else {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    }
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [isAuditing]);
 
   const handleSubmitAudit = useCallback(async () => {
     if (!contractCode.trim()) {
@@ -237,7 +296,7 @@ export default function HomePage() {
               {isAuditing ? (
                 <>
                   <span className="animate-spin">⟳</span>
-                  Analyzing...
+                  Auditing…
                 </>
               ) : (
                 <>
@@ -247,6 +306,95 @@ export default function HomePage() {
             </button>
           </div>
         </motion.section>
+
+        {/* ── Recent Audits ────────────────────────────────── */}
+        {recentAudits.length > 0 && (
+          <motion.section
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3, delay: 0.2 }}
+            className="glass-card p-5"
+            id="recent-audits"
+          >
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-sentinel-text-muted mb-3">
+              Recent Audits
+            </h2>
+            <ul className="divide-y divide-sentinel-border/40">
+              {recentAudits.map((audit) => (
+                <li
+                  key={audit.id}
+                  className="flex items-center justify-between py-2.5 first:pt-0 last:pb-0"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    {/* Status dot */}
+                    <span
+                      className={`shrink-0 h-2 w-2 rounded-full ${
+                        audit.overallStatus === 'secure'
+                          ? 'bg-emerald-400'
+                          : audit.overallStatus === 'vulnerable'
+                          ? 'bg-red-400'
+                          : 'bg-gray-500'
+                      }`}
+                    />
+                    <span className="text-sm text-sentinel-text truncate">
+                      {audit.contractName || 'Unnamed Contract'}
+                    </span>
+                  </div>
+                  <span className="shrink-0 text-[11px] font-mono text-sentinel-text-muted ml-4">
+                    {new Date(audit.timestamp).toLocaleDateString(undefined, {
+                      month: 'short',
+                      day: 'numeric',
+                    })}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </motion.section>
+        )}
+
+        {/* ── Terminal Loading Display ─────────────────────── */}
+        <AnimatePresence>
+          {isAuditing && (
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              className="glass-card border-green-500/20 p-6"
+              id="terminal-loading"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <span className="relative flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                </span>
+                <span className="text-xs font-semibold uppercase tracking-widest text-green-400/80">
+                  Sentinel Engine Active
+                </span>
+              </div>
+
+              <div className="bg-black/60 rounded-xl border border-green-500/10 p-5 font-mono text-sm space-y-2 overflow-hidden">
+                {TERMINAL_MESSAGES.map((msg, i) => (
+                  <div
+                    key={msg}
+                    className={`flex items-center gap-2 transition-all duration-500 ${
+                      i < terminalIdx
+                        ? 'text-green-600/50'
+                        : i === terminalIdx
+                        ? 'text-green-400 animate-pulse drop-shadow-[0_0_6px_rgba(74,222,128,0.5)]'
+                        : 'text-green-900/30'
+                    }`}
+                  >
+                    <span>{i <= terminalIdx ? '▸' : '◦'}</span>
+                    <span>{msg}</span>
+                    {i === terminalIdx && (
+                      <span className="inline-block w-2 h-4 bg-green-400 animate-pulse ml-1" />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* ── Error Display ───────────────────────────────── */}
         <AnimatePresence>
@@ -269,114 +417,157 @@ export default function HomePage() {
           )}
         </AnimatePresence>
 
-        {/* ── Audit Report ────────────────────────────────── */}
+        {/* ── Audit Report ── Cybersecurity Dashboard ──────── */}
         <AnimatePresence>
           {report && (
             <motion.section
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="space-y-6"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.35 }}
+              className="space-y-5"
               id="audit-report"
             >
-              {/* Summary Card */}
+              {/* ── Summary Banner ────────────────────────────── */}
               <div
-                className={`glass-card p-6 border-l-4 ${
+                className={`glass-card p-0 overflow-hidden border-l-4 ${
                   report.overall_status === 'vulnerable'
                     ? 'border-l-red-500'
                     : 'border-l-emerald-500'
                 }`}
               >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="flex items-center gap-3 mb-2">
-                      <span className="text-2xl">
+                {/* Top strip */}
+                <div className="px-6 pt-5 pb-4 flex items-start justify-between gap-4">
+                  <div className="space-y-1.5 min-w-0">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-xl leading-none">
                         {report.overall_status === 'vulnerable' ? '🚨' : '✅'}
                       </span>
-                      <h2 className="text-2xl font-bold text-white">
+                      <h2 className="text-xl font-bold text-white truncate">
                         {report.contract_name}
                       </h2>
                     </div>
-                    <p className="text-sentinel-text-dim">{report.summary}</p>
-                  </div>
-                  <div className="text-right">
-                    <span
-                      className={`inline-block px-4 py-1.5 rounded-full text-sm font-bold uppercase tracking-wide ${
-                        report.overall_status === 'vulnerable'
-                          ? 'bg-red-500/15 text-red-400 border border-red-500/30'
-                          : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                      }`}
-                    >
-                      {report.overall_status}
-                    </span>
-                    <p className="text-sentinel-text-muted text-sm mt-2">
-                      {report.findings.length} finding{report.findings.length !== 1 ? 's' : ''}
+                    <p className="text-sentinel-text-dim text-sm leading-relaxed">
+                      {report.summary}
                     </p>
+                  </div>
+                  <span
+                    className={`shrink-0 px-3.5 py-1 rounded-md text-xs font-bold font-mono uppercase tracking-wider ${
+                      report.overall_status === 'vulnerable'
+                        ? 'bg-red-500/15 text-red-400 border border-red-500/30'
+                        : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                    }`}
+                  >
+                    {report.overall_status}
+                  </span>
+                </div>
+
+                {/* Severity breakdown counters */}
+                <div className="border-t border-sentinel-border/60 px-6 py-3 flex items-center gap-6 bg-black/20 text-xs">
+                  {(['Critical', 'High', 'Medium', 'Low'] as const).map((sev) => {
+                    const count = report.findings.filter((f) => f.severity === sev).length;
+                    const color: Record<string, string> = {
+                      Critical: 'text-red-400',
+                      High: 'text-orange-400',
+                      Medium: 'text-yellow-400',
+                      Low: 'text-blue-400',
+                    };
+                    return (
+                      <div key={sev} className="flex items-center gap-1.5">
+                        <span className={`font-mono font-bold text-sm ${color[sev]}`}>
+                          {count}
+                        </span>
+                        <span className="text-sentinel-text-muted uppercase tracking-wide">
+                          {sev}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  <div className="ml-auto text-sentinel-text-muted">
+                    {report.findings.length} total finding{report.findings.length !== 1 ? 's' : ''}
                   </div>
                 </div>
               </div>
 
-              {/* Findings */}
-              {report.findings.map((finding, index) => (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, y: 15 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                  className="glass-card p-6 space-y-4"
-                  id={`finding-${index}`}
-                >
-                  {/* Finding header */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className="text-lg">{severityIcon(finding.severity)}</span>
-                      <h3 className="text-lg font-semibold text-white">
-                        {finding.vulnerability_type}
-                      </h3>
-                    </div>
-                    <span
-                      className={`px-3 py-1 rounded-lg text-xs font-bold uppercase border ${severityColor(finding.severity)}`}
+              {/* ── Findings Grid ─────────────────────────────── */}
+              <div className="space-y-4">
+                {report.findings.map((finding, index) => {
+                  const borderMap: Record<string, string> = {
+                    Critical: 'border-l-red-500',
+                    High: 'border-l-orange-500',
+                    Medium: 'border-l-yellow-500',
+                    Low: 'border-l-blue-500',
+                  };
+                  const badgeBg: Record<string, string> = {
+                    Critical: 'bg-red-500/15 text-red-400 border-red-500/30',
+                    High: 'bg-orange-500/15 text-orange-400 border-orange-500/30',
+                    Medium: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
+                    Low: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
+                  };
+
+                  return (
+                    <motion.div
+                      key={index}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ duration: 0.25, delay: index * 0.06 }}
+                      className={`glass-card border-l-4 ${borderMap[finding.severity] ?? ''} p-5 space-y-4`}
+                      id={`finding-${index}`}
                     >
-                      {finding.severity}
-                    </span>
-                  </div>
+                      {/* Row 1 — Vulnerability type + severity badge */}
+                      <div className="flex items-center justify-between gap-3">
+                        <h3 className="text-base font-bold text-white leading-tight">
+                          {finding.vulnerability_type}
+                        </h3>
+                        <span
+                          className={`shrink-0 px-2.5 py-0.5 rounded font-mono text-[11px] font-bold uppercase tracking-wider border ${badgeBg[finding.severity] ?? ''}`}
+                        >
+                          {finding.severity}
+                        </span>
+                      </div>
 
-                  {/* Affected lines */}
-                  <div className="flex items-center gap-2 text-sm text-sentinel-text-dim">
-                    <span className="font-mono bg-sentinel-bg px-2 py-0.5 rounded">
-                      Lines: {finding.line_number.join(', ')}
-                    </span>
-                  </div>
+                      {/* Row 2 — Line numbers */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] uppercase tracking-wider text-sentinel-text-muted">
+                          Affected Lines
+                        </span>
+                        <span className="font-mono text-sm text-gray-400 bg-black/30 px-2 py-0.5 rounded">
+                          {finding.line_number.join(', ')}
+                        </span>
+                      </div>
 
-                  {/* Impact */}
-                  <div>
-                    <h4 className="text-sm font-semibold text-sentinel-text-dim uppercase tracking-wide mb-2">
-                      Impact Analysis
-                    </h4>
-                    <p className="text-sentinel-text leading-relaxed">
-                      {finding.impact_analysis}
-                    </p>
-                  </div>
+                      {/* Row 3 — Impact analysis */}
+                      <div>
+                        <h4 className="text-[11px] uppercase tracking-wider text-sentinel-text-muted mb-1.5">
+                          Impact Analysis
+                        </h4>
+                        <p className="text-sm text-sentinel-text leading-relaxed">
+                          {finding.impact_analysis}
+                        </p>
+                      </div>
 
-                  {/* Suggested patch */}
-                  {finding.suggested_patch && (
-                    <div>
-                      <h4 className="text-sm font-semibold text-sentinel-text-dim uppercase tracking-wide mb-2">
-                        Suggested Patch
-                      </h4>
-                      <pre className="bg-sentinel-bg border border-sentinel-border rounded-xl p-4 overflow-x-auto text-sm font-mono text-emerald-300 whitespace-pre-wrap">
-                        {finding.suggested_patch}
-                      </pre>
-                    </div>
-                  )}
-                </motion.div>
-              ))}
+                      {/* Row 4 — Suggested patch */}
+                      {finding.suggested_patch && (
+                        <div>
+                          <h4 className="text-[11px] uppercase tracking-wider text-sentinel-text-muted mb-1.5">
+                            Suggested Patch
+                          </h4>
+                          <pre className="bg-gray-900 rounded-md p-3 font-mono text-sm text-blue-300 overflow-x-auto whitespace-pre-wrap border border-gray-800/60">
+                            {finding.suggested_patch}
+                          </pre>
+                        </div>
+                      )}
+                    </motion.div>
+                  );
+                })}
+              </div>
 
-              {/* Metadata footer */}
+              {/* ── Metadata footer ───────────────────────────── */}
               {result && (
-                <div className="text-center text-sentinel-text-muted text-sm space-y-1 pt-2">
-                  <p>Audit ID: <span className="font-mono">{result.id}</span></p>
-                  <p>Completed: {new Date(result.timestamp).toLocaleString()}</p>
+                <div className="flex items-center justify-center gap-6 text-sentinel-text-muted text-xs font-mono pt-2 pb-1">
+                  <span>ID {result.id}</span>
+                  <span className="text-sentinel-border">│</span>
+                  <span>{new Date(result.timestamp).toLocaleString()}</span>
                 </div>
               )}
             </motion.section>
