@@ -1,0 +1,41 @@
+# ─── Docker Compose — Local Development ──────────────────────
+
+services:
+  sentinel-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - DATABASE_PATH=/app/data/sentinel.db
+      - NOSANA_ENDPOINT=${NOSANA_ENDPOINT:-http://host.docker.internal:8080/v1}
+      - NOSANA_API_KEY=${NOSANA_API_KEY:-nosana}
+      - NOSANA_MODEL=${NOSANA_MODEL:-Qwen/Qwen3-32B-AWQ}
+    volumes:
+      - sentinel-data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  sentinel-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:3000
+    depends_on:
+      sentinel-api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  sentinel-data:

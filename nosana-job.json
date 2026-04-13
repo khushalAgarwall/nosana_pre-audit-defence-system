@@ -1,0 +1,33 @@
+{
+  "version": "0.1",
+  "type": "container",
+  "meta": {
+    "trigger": "cli"
+  },
+  "ops": [
+    {
+      "type": "container/run",
+      "id": "sentinel-audit",
+      "args": {
+        "cmd": ["node", "dist/server.js"],
+        "image": "nosana/sentinel-audit:latest",
+        "gpu": true,
+        "gpu_count": 1,
+        "expose": 3000,
+        "env": {
+          "NODE_ENV": "production",
+          "PORT": "3000",
+          "DATABASE_PATH": "/app/data/sentinel.db",
+          "NOSANA_ENDPOINT": "http://localhost:8080/v1",
+          "NOSANA_API_KEY": "nosana",
+          "NOSANA_MODEL": "Qwen/Qwen3-32B-AWQ"
+        },
+        "resources": {
+          "memory": "4096",
+          "disk": "10240"
+        },
+        "work_dir": "/app"
+      }
+    }
+  ]
+}
