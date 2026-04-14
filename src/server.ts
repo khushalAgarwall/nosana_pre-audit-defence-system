@@ -21,9 +21,7 @@ export function createServer(): express.Application {
 
   // ── Middleware ───────────────────────────────────────────
   app.use(cors({
-    origin: process.env.NODE_ENV === 'production'
-      ? ['http://localhost:3001']
-      : '*',
+    origin: '*',
     methods: ['GET', 'POST'],
     allowedHeaders: ['Content-Type'],
   }));
