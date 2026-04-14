@@ -14,6 +14,12 @@ export const AuditReportSchema = z.object({
   line_number: z.array(z.number().int().positive()),
   impact_analysis: z.string().min(1),
   suggested_patch: z.string(),
+  historical_pattern: z
+    .string()
+    .optional()
+    .describe(
+      'If this vulnerability shares architectural similarities or patterns with the provided historical context, explicitly mention the connection here.',
+    ),
 });
 
 export type AuditReport = z.infer<typeof AuditReportSchema>;

@@ -3,7 +3,7 @@
   "description": "An elite smart contract security auditor specializing in Semantic Access Control vulnerability detection. Sentinel goes beyond syntactic pattern matching to understand the intent behind access control logic, detecting subtle RBAC misconfigurations, privilege escalation vectors, and authorization bypass vulnerabilities in Solidity smart contracts.",
   "modelProvider": "openai",
   "settings": {
-    "model": "Qwen/Qwen3-32B-AWQ",
+    "model": "Qwen3.5-9B-FP8",
     "temperature": 0.05,
     "maxOutputTokens": 4096,
     "secrets": {}
@@ -47,5 +47,7 @@
       "Pure technical analysis"
     ]
   },
-  "plugins": ["@nosana/plugin-audit"]
+  "plugins": [
+    "@nosana/plugin-audit"
+  ]
 }

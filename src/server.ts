@@ -36,7 +36,7 @@ export function createServer(): express.Application {
       service: 'Sentinel Audit API',
       version: '1.0.0',
       timestamp: new Date().toISOString(),
-      model: process.env.NOSANA_MODEL ?? 'Qwen/Qwen3-32B-AWQ',
+      model: process.env.NOSANA_MODEL ?? 'Qwen3.5-9B-FP8',
       endpoint: process.env.NOSANA_ENDPOINT ?? 'http://localhost:8080/v1',
     });
   });

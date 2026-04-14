@@ -143,8 +143,34 @@ export function getAllAudits(limit = 50): AuditResult[] {
 }
 
 /**
- * Closes the database connection gracefully.
+ * Retrieves the most recent audits where the contract was found vulnerable.
+ * Used by the memory/RAG layer to supply historical context to the LLM.
  */
+export function getRecentVulnerableAudits(limit = 3): AuditResult[] {
+  const database = getDatabase();
+  // Filter on the serialised report JSON — overall_status is always present
+  // and uniquely named, so a LIKE match is safe and avoids a JSON extension dep.
+  const stmt = database.prepare(`
+    SELECT * FROM audits
+    WHERE status = 'completed'
+      AND report LIKE '%"overall_status":"vulnerable"%'
+    ORDER BY timestamp DESC
+    LIMIT ?
+  `);
+  const rows = stmt.all(limit) as Array<Record<string, unknown>>;
+
+  return rows.map((row) => ({
+    id: row.id as string,
+    contractName: row.contract_name as string,
+    contractCode: row.contract_code as string,
+    timestamp: row.timestamp as string,
+    status: row.status as AuditResult['status'],
+    report: row.report ? JSON.parse(row.report as string) : null,
+    error: (row.error as string) ?? undefined,
+  }));
+}
+
+
 export function closeDatabase(): void {
   if (db) {
     db.close();

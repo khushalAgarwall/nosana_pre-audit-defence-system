@@ -10,6 +10,7 @@ import type {
   ActionExample,
   AgentRuntime,
   AuditResponse,
+  AuditResult,
   HandlerCallback,
   Memory,
   State,
@@ -19,6 +20,7 @@ import {
   buildAuditPrompt,
   buildSystemPrompt,
 } from '../../utils/promptBuilder.js';
+import { getRecentVulnerableAudits } from '../../database/index.js';
 
 // ── OpenAI-compatible client for Qwen3.5 on Nosana ─────────
 
@@ -120,6 +122,35 @@ function parseAuditResponse(raw: string): AuditResponse {
   return result.data;
 }
 
+// ── Memory / RAG helpers ─────────────────────────────────────
+
+/**
+ * Fetches the last N vulnerable audits from the DB and formats them
+ * into a compact summary string for the MEMORY LAYER prompt injection.
+ * Returns undefined when there is no history (first run, empty DB, etc.).
+ */
+function buildHistoricalContext(limit = 3): string | undefined {
+  try {
+    const recentVulnerable = getRecentVulnerableAudits(limit);
+    if (recentVulnerable.length === 0) return undefined;
+
+    const lines = recentVulnerable.map((audit: AuditResult) => {
+      const report = audit.report;
+      if (!report || report.findings.length === 0) return null;
+
+      // Pick the highest-severity finding for the summary line
+      const topFinding = report.findings[0];
+      return `Past Audit: ${audit.contractName} had a ${topFinding.severity} vulnerability (${topFinding.vulnerability_type}).`;
+    }).filter((line): line is string => line !== null);
+
+    return lines.length > 0 ? lines.join(' ') : undefined;
+  } catch (err) {
+    // History is non-critical — never block an audit over a DB read failure
+    console.warn('[Sentinel] Could not fetch audit history for RAG context:', err);
+    return undefined;
+  }
+}
+
 // ── Core audit execution ────────────────────────────────────
 
 /**
@@ -138,12 +169,18 @@ export async function executeAudit(
   const parsed = parseSolidityContract(contractCode);
   if (contractName) parsed.name = contractName;
 
-  // Step 2: Build prompts
-  const systemPrompt = buildSystemPrompt();
+  // Step 2: Fetch historical context for RAG/memory layer injection
+  const historicalContext = buildHistoricalContext(3);
+  if (historicalContext) {
+    console.log(`[Sentinel] Memory layer active — injecting ${historicalContext.split('Past Audit:').length - 1} historical finding(s)`);
+  }
+
+  // Step 3: Build prompts (historical context wired into system prompt)
+  const systemPrompt = buildSystemPrompt(historicalContext);
   const userPrompt = buildAuditPrompt(contractCode, parsed);
 
-  // Step 3: Call the model with retry logic
-  const model = process.env.NOSANA_MODEL ?? 'Qwen/Qwen3-32B-AWQ';
+  // Step 4: Call the model with retry logic
+  const model = process.env.NOSANA_MODEL ?? 'Qwen3.5-9B-FP8';
   const client = getClient();
 
   let lastError: Error | null = null;
@@ -172,7 +209,7 @@ export async function executeAudit(
 
       console.log(`[Sentinel] Raw response length: ${rawResponse.length} chars`);
 
-      // Step 4: Parse & validate
+      // Step 5: Parse & validate
       const report = parseAuditResponse(rawResponse);
 
       // Ensure contract name is set

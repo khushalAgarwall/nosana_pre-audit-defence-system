@@ -12,8 +12,17 @@ import { contractSummary } from './solidityParser.js';
  * - Role definition & expertise framing
  * - Strict JSON schema enforcement
  * - Semantic access control analysis framework
+ * - Optional RAG/memory layer injection via historicalContext
+ *
+ * @param historicalContext - Optional string of recent vulnerability summaries
+ *   from previous audits in this repository. When provided, the model is
+ *   instructed to cross-reference patterns and populate `historical_pattern`.
  */
-export function buildSystemPrompt(): string {
+export function buildSystemPrompt(historicalContext?: string): string {
+  const memoryLayer = historicalContext
+    ? `\nMEMORY LAYER: Here is the context of recent vulnerabilities found in this repository: ${historicalContext}. If the current contract shares vulnerability patterns with these past audits, you MUST populate the historical_pattern field explaining the connection.\n`
+    : '';
+
   return `You are Sentinel, an elite smart contract security auditor specializing in Semantic Access Control vulnerability detection.
 
 Your analysis MUST cover three dimensions:
@@ -49,7 +58,8 @@ If you find vulnerabilities, return an object with a "findings" array:
       "severity": "Critical" | "High" | "Medium" | "Low",
       "line_number": [<affected line numbers as integers>],
       "impact_analysis": "<Plain English explanation of the financial/logic risk>",
-      "suggested_patch": "<Exact Solidity code block resolving the issue>"
+      "suggested_patch": "<Exact Solidity code block resolving the issue>",
+      "historical_pattern": "<If applicable: connection to past vulnerabilities from the MEMORY LAYER>"
     }
   ],
   "contract_name": "<Name of the contract>",
@@ -64,7 +74,7 @@ If the contract is SECURE, return:
   "overall_status": "secure",
   "summary": "<Brief confirmation of security posture>"
 }
-
+${memoryLayer}
 CRITICAL RULES:
 - Return ONLY the JSON object. No other text.
 - Do NOT wrap in markdown code fences.
@@ -72,7 +82,8 @@ CRITICAL RULES:
 - line_number must be an array of positive integers
 - Every state-changing function without access control IS a finding
 - Do not report view/pure functions as access control issues
-- Be precise with line numbers — they must match the source code`;
+- Be precise with line numbers — they must match the source code
+- historical_pattern is optional — only populate it when the MEMORY LAYER reveals a genuine pattern match`;
 }
 
 /**

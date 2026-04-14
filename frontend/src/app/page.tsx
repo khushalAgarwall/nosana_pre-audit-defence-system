@@ -557,6 +557,18 @@ export default function HomePage() {
                           </pre>
                         </div>
                       )}
+
+                      {/* Row 5 — Eliza memory layer */}
+                      {finding.historical_pattern && (
+                        <div className="bg-indigo-900/30 border-l-4 border-indigo-500 p-4 mt-4 rounded-r-md">
+                          <p className="font-mono text-[11px] font-bold uppercase tracking-widest text-indigo-400 mb-1">
+                            🧠 ELIZA SYSTEM MEMORY:
+                          </p>
+                          <p className="text-sm text-indigo-200 leading-relaxed">
+                            {finding.historical_pattern}
+                          </p>
+                        </div>
+                      )}
                     </motion.div>
                   );
                 })}
