@@ -12,6 +12,7 @@ interface AuditFinding {
   line_number: number[];
   impact_analysis: string;
   suggested_patch: string;
+  historical_pattern?: string;
 }
 
 interface AuditReport {
@@ -328,13 +329,12 @@ export default function HomePage() {
                   <div className="flex items-center gap-2.5 min-w-0">
                     {/* Status dot */}
                     <span
-                      className={`shrink-0 h-2 w-2 rounded-full ${
-                        audit.overallStatus === 'secure'
+                      className={`shrink-0 h-2 w-2 rounded-full ${audit.overallStatus === 'secure'
                           ? 'bg-emerald-400'
                           : audit.overallStatus === 'vulnerable'
-                          ? 'bg-red-400'
-                          : 'bg-gray-500'
-                      }`}
+                            ? 'bg-red-400'
+                            : 'bg-gray-500'
+                        }`}
                     />
                     <span className="text-sm text-sentinel-text truncate">
                       {audit.contractName || 'Unnamed Contract'}
@@ -376,13 +376,12 @@ export default function HomePage() {
                 {TERMINAL_MESSAGES.map((msg, i) => (
                   <div
                     key={msg}
-                    className={`flex items-center gap-2 transition-all duration-500 ${
-                      i < terminalIdx
+                    className={`flex items-center gap-2 transition-all duration-500 ${i < terminalIdx
                         ? 'text-green-600/50'
                         : i === terminalIdx
-                        ? 'text-green-400 animate-pulse drop-shadow-[0_0_6px_rgba(74,222,128,0.5)]'
-                        : 'text-green-900/30'
-                    }`}
+                          ? 'text-green-400 animate-pulse drop-shadow-[0_0_6px_rgba(74,222,128,0.5)]'
+                          : 'text-green-900/30'
+                      }`}
                   >
                     <span>{i <= terminalIdx ? '▸' : '◦'}</span>
                     <span>{msg}</span>
@@ -430,11 +429,10 @@ export default function HomePage() {
             >
               {/* ── Summary Banner ────────────────────────────── */}
               <div
-                className={`glass-card p-0 overflow-hidden border-l-4 ${
-                  report.overall_status === 'vulnerable'
+                className={`glass-card p-0 overflow-hidden border-l-4 ${report.overall_status === 'vulnerable'
                     ? 'border-l-red-500'
                     : 'border-l-emerald-500'
-                }`}
+                  }`}
               >
                 {/* Top strip */}
                 <div className="px-6 pt-5 pb-4 flex items-start justify-between gap-4">
@@ -452,11 +450,10 @@ export default function HomePage() {
                     </p>
                   </div>
                   <span
-                    className={`shrink-0 px-3.5 py-1 rounded-md text-xs font-bold font-mono uppercase tracking-wider ${
-                      report.overall_status === 'vulnerable'
+                    className={`shrink-0 px-3.5 py-1 rounded-md text-xs font-bold font-mono uppercase tracking-wider ${report.overall_status === 'vulnerable'
                         ? 'bg-red-500/15 text-red-400 border border-red-500/30'
                         : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                    }`}
+                      }`}
                   >
                     {report.overall_status}
                   </span>
